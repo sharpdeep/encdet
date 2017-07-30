@@ -217,30 +217,45 @@ def encdet(root_path, scan_type_list):
     :return:
     """
     output_path = user_cfg.get('output_path', './encdet.out.csv')
+    exclude_file_path = user_cfg.get('exclude_file', './encdet.exclude.csv')
     # 递归每个目录
     for root, dir_name_list, file_name_list in os.walk(root_path):
         # 根目录已经被排除列表排除，直接结束子目录遍历
         if not need_scan(root):
             # 不再遍历此目录下的子目录
             dir_name_list[:] = []
+            # 将路径记录下来
+            with open(exclude_file_path, 'a') as fw:
+                fw.write('%s,%s\n' % (os.path.realpath(root), 'exclude_filter'))
             # 不需处理目录下的文件
             continue
 
         # 将每个目录下的文件转换为绝对路径，再过滤需要的类型
+        file_path_list = list(map(lambda file_name: os.path.realpath(os.path.join(root, file_name)), file_name_list))
         # all类型，过滤所有text文件，并未被排除的文件
         if 'all' in scan_type_list:  # 所有text文件
-            path_list = list(filter(lambda path: is_text_file(path) and need_scan(path),
-                                    list(map(lambda file_name: os.path.join(root, file_name), file_name_list))))
+            type_filte_path_list = list(filter(lambda path: is_text_file(path),
+                                    file_path_list))
         else:  # 需要过滤类型
-            path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list and need_scan(path),
-                                    list(map(lambda file_name: os.path.join(root, file_name), file_name_list))))
+            type_filte_path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list,
+                                    file_path_list))
+        scan_path_list = list(filter(lambda path: need_scan(path), type_filte_path_list))
+
+        for path in diffset(file_path_list, type_filte_path_list):
+            with open(exclude_file_path, 'a') as fw:
+                fw.write('%s,%s\n' % (path, 'type filter'))
+
+        for path in diffset(type_filte_path_list, scan_path_list):
+            with open(exclude_file_path, 'a') as fw:
+                fw.write('%s,%s\n' % (path, 'exclude_filter'))
+
         # 目录下所有符合条件的文件的编码
-        file_encoding_list = list(map(lambda path: detect_encoding(path), path_list))
+        file_encoding_list = list(map(lambda path: detect_encoding(path), scan_path_list))
         # 目录下所有符合条件的文件类型
-        file_type_list = list(map(lambda path: detect_filetype(path), path_list))
+        file_type_list = list(map(lambda path: detect_filetype(path), scan_path_list))
         for index, file_encoding in enumerate(file_encoding_list):
             with open(output_path, 'a') as fw:
-                fw.write('%s,%s,%s' % (path_list[index], file_type_list[index], file_encoding))
+                fw.write('%s,%s,%s' % (scan_path_list[index], file_type_list[index], file_encoding))
 
 
 def diffset(list1, list2):
@@ -335,11 +350,19 @@ def main(argv):
         handle_config()
         scan_path_list = user_cfg.get('scan_filter', dict()).get('scan_path', list())
         scan_type_list = user_cfg.get('scan_filter', dict()).get('scan_type', list())
+        # 结果输出路径
         output_path = user_cfg.get('output_path', './encdet.out.csv')
         with open(output_path, 'w') as fw:
             fw.write('file path,file type,encoding\n\n')
+
+        # 扫描过程被排除的文件路径输出
+        exclude_file_path = user_cfg.get('exclude_file', './encdet.exclude.csv')
+        with open(exclude_file_path, 'w') as fw:
+            fw.write('exclude_file_path, exclude_reason\n\n')
+
         for scan_path in scan_path_list:
             encdet(scan_path, scan_type_list)
+
     # 其他不能识别的命令，打印帮助信息
     else:
         logger.error('option %s not recognized' % (argv[1]))

@@ -33,5 +33,8 @@ user_cfg = {
 
     # 结果输出路径，默认为./encdet.out.csv
     # 没有该字段，也会输出到./encdet.out.csv
-    'output_path': './encdet.out.csv'
+    'output_path': './encdet.out.csv',
+
+    #  扫描过程中，扫描路径的排除路径，可以用于排错
+                   'exclude_file': './encdet.exclude.csv'
 }
