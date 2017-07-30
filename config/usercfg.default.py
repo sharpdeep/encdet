@@ -36,5 +36,5 @@ user_cfg = {
     'output_path': './encdet.out.csv',
 
     #  扫描过程中，扫描路径的排除路径，可以用于排错
-                   'exclude_file': './encdet.exclude.csv'
+    'exclude_file': './encdet.exclude.csv'
 }

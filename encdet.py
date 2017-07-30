@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import sys
+import multiprocessing
 
 from config.syscfg import sys_cfg
 from functools import reduce
@@ -210,53 +211,77 @@ def handle_config():
         user_cfg['scan_filter']['scan_type'] = ['all']
 
 
-def encdet(root_path, scan_type_list):
+def walk_encdet(root_path, scan_type_list):
     """
     核心函数，递归检查编码，并输出结果
     :param root_path:
+    :param scan_type_list: 扫描类型列表
     :return:
     """
-    output_path = user_cfg.get('output_path', './encdet.out.csv')
     exclude_file_path = user_cfg.get('exclude_file', './encdet.exclude.csv')
+    pool = multiprocessing.Pool(sys_cfg.get('worker_num', 4))
+    lock = multiprocessing.Manager().Lock()
     # 递归每个目录
     for root, dir_name_list, file_name_list in os.walk(root_path):
         # 根目录已经被排除列表排除，直接结束子目录遍历
         if not need_scan(root):
             # 不再遍历此目录下的子目录
             dir_name_list[:] = []
-            # 将路径记录下来
+            # # 不需处理目录下的文件
+            # continue
+        pool.apply_async(encdet, args=(lock, root, dir_name_list, file_name_list,scan_type_list))
+    pool.close()
+    pool.join()
+
+def encdet(lock, root, dir_name_list, file_name_list, scan_type_list):
+    """
+    多进程代码，用于将walk_encdet中遍历的路径进行处理
+    :param lock: 进程锁
+    :param root:  根目录
+    :param dir_name_list: 根目录下所有目录名
+    :param file_name_list:  根目录下所有文件名
+    :param scan_type_list: 扫描类型列表
+    :return:
+    """
+    output_path = user_cfg.get('output_path', './encdet.out.csv')
+    exclude_file_path = user_cfg.get('exclude_file', './encdet.exclude.csv')
+
+    if not need_scan(root):
+        # 不需扫描，将路径记录，然后结束
+        with lock:
             with open(exclude_file_path, 'a') as fw:
                 fw.write('%s,%s\n' % (os.path.realpath(root), 'exclude_filter'))
-            # 不需处理目录下的文件
-            continue
+        return
 
-        # 将每个目录下的文件转换为绝对路径，再过滤需要的类型
-        file_path_list = list(map(lambda file_name: os.path.realpath(os.path.join(root, file_name)), file_name_list))
-        # all类型，过滤所有text文件，并未被排除的文件
-        if 'all' in scan_type_list:  # 所有text文件
-            type_filte_path_list = list(filter(lambda path: is_text_file(path),
-                                    file_path_list))
-        else:  # 需要过滤类型
-            type_filte_path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list,
-                                    file_path_list))
-        scan_path_list = list(filter(lambda path: need_scan(path), type_filte_path_list))
+    # 将每个目录下的文件转换为绝对路径，再过滤需要的类型
+    file_path_list = list(map(lambda file_name: os.path.realpath(os.path.join(root, file_name)), file_name_list))
+    # all类型，过滤所有text文件，并未被排除的文件
+    if 'all' in scan_type_list:  # 所有text文件
+        type_filte_path_list = list(filter(lambda path: is_text_file(path),
+                                           file_path_list))
+    else:  # 需要过滤类型
+        type_filte_path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list,
+                                           file_path_list))
+    scan_path_list = list(filter(lambda path: need_scan(path), type_filte_path_list))
 
-        for path in diffset(file_path_list, type_filte_path_list):
+    for path in diffset(file_path_list, type_filte_path_list):
+        with lock:
             with open(exclude_file_path, 'a') as fw:
                 fw.write('%s,%s\n' % (path, 'type filter'))
 
-        for path in diffset(type_filte_path_list, scan_path_list):
+    for path in diffset(type_filte_path_list, scan_path_list):
+        with lock:
             with open(exclude_file_path, 'a') as fw:
                 fw.write('%s,%s\n' % (path, 'exclude_filter'))
 
-        # 目录下所有符合条件的文件的编码
-        file_encoding_list = list(map(lambda path: detect_encoding(path), scan_path_list))
-        # 目录下所有符合条件的文件类型
-        file_type_list = list(map(lambda path: detect_filetype(path), scan_path_list))
-        for index, file_encoding in enumerate(file_encoding_list):
+    # 目录下所有符合条件的文件的编码
+    file_encoding_list = list(map(lambda path: detect_encoding(path), scan_path_list))
+    # 目录下所有符合条件的文件类型
+    file_type_list = list(map(lambda path: detect_filetype(path), scan_path_list))
+    for index, file_encoding in enumerate(file_encoding_list):
+        with lock:
             with open(output_path, 'a') as fw:
                 fw.write('%s,%s,%s' % (scan_path_list[index], file_type_list[index], file_encoding))
-
 
 def diffset(list1, list2):
     """
@@ -361,7 +386,7 @@ def main(argv):
             fw.write('exclude_file_path, exclude_reason\n\n')
 
         for scan_path in scan_path_list:
-            encdet(scan_path, scan_type_list)
+            walk_encdet(scan_path, scan_type_list)
 
     # 其他不能识别的命令，打印帮助信息
     else:

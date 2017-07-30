@@ -37,5 +37,8 @@ sys_cfg = {
             'html': 'text/html',
             'text': 'text/plain',
         }
-    }
+    },
+
+    # 多进程选项，进程数
+    'worker_num': 4
 }
