@@ -196,8 +196,6 @@ def encdet(root_path, scan_type_list):
     :return:
     """
     output_path = user_cfg.get('output_path', './encdet.out.csv')
-    with open(output_path, 'w') as fw:
-        fw.write('file path,file type,encoding\n\n')
     # 递归每个目录
     for root, dir_name_list, file_name_list in os.walk(root_path):
         # 将每个目录下的文件转换为绝对路径，再过滤需要的类型
@@ -298,6 +296,9 @@ def main(argv):
         handle_config()
         scan_path_list = user_cfg.get('scan_filter', dict()).get('scan_path', list())
         scan_type_list = user_cfg.get('scan_filter', dict()).get('scan_type', list())
+        output_path = user_cfg.get('output_path', './encdet.out.csv')
+        with open(output_path, 'w') as fw:
+            fw.write('file path,file type,encoding\n\n')
         for scan_path in scan_path_list:
             encdet(scan_path, scan_type_list)
     # 其他不能识别的命令，打印帮助信息
