@@ -137,17 +137,22 @@ def verify_config():
         sys.exit(2)
 
     # 检查scan_filter配置
-    if len(user_cfg.get('scan_filter', dict()).get('scan_path', list())) == 0:
+    scan_path = user_cfg.get('scan_filter', dict()).get('scan_path', list())
+    if len(scan_path) == 0:
         logger.error('scan_filter config is Error!')
         sys.exit(2)
 
-    if len(user_cfg.get('scan_filter', dict()).get('scan_type', list())) == 0:
+    not_exist_scan_path_list = filter(lambda path: not os.path.exists(path), scan_path)
+    if len(not_exist_scan_path_list) > 0:
+        logger.warning('the path %s is not exist' % not_exist_scan_path_list)
+    if len(scan_path) == 0:
         logger.warning('scan_type is empty, encdet will scan all text type')
         user_cfg['scan_filter']['scan_type'] = ['all']
 
     # 检查exclude_filter配置
-    if len(user_cfg.get('exclude_filter', dict()).get('exclude_path', list())) == 0 \
-            and len(user_cfg.get('exclude_filter', dict()).get('exclude_regex', list())) == 0:
+    exclude_path_list = user_cfg.get('exclude_filter', dict()).get('exclude_path', list())
+    exclude_regex_list = user_cfg.get('exclude_filter', dict()).get('exclude_regex', list())
+    if len(exclude_path_list) == 0 and len(exclude_regex_list) == 0:
         logger.warning('exclude filter is not config, encdet will not filte any path')
 
     # 检查配置过滤类型是否都是内置的
@@ -157,7 +162,7 @@ def verify_config():
     verify_type_list = [type for type in user_cfg.get('scan_filter', dict()).get('scan_type', list()) if
                         type != 'all' and (type not in postfix_type_list and type not in mimetype_type_list)]
     if len(verify_type_list) > 0:
-        logger.error('%s is not the valid type' % (verify_type_list))
+        logger.error('%s is not the valid type' % verify_type_list)
         sys.exit(2)
 
     logger.debug('verify config is ok')
