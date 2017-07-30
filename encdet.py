@@ -10,6 +10,7 @@ import sys
 from config.syscfg import sys_cfg
 from functools import reduce
 
+
 def init_log(log_path='./encdet.log'):
     """
     初始化日志，默认日志输出路径为./encdet.log
@@ -33,7 +34,6 @@ def init_log(log_path='./encdet.log'):
 
 logger = init_log()
 
-
 # 尝试import usercfg.py
 try:
     from config.usercfg import user_cfg
@@ -49,7 +49,7 @@ def detect_postfix(file_path):
     :returns: 文件类型，不是已知类型则返回other
     """
     for type, postfix in sys_cfg.get('file_feature', dict()).get('postfix', dict()).items():
-        if re.match(postfix,file_path):
+        if re.match(postfix, file_path):
             return type
     return 'other'
 
@@ -62,10 +62,11 @@ def detect_mimetype(file_path):
     """
     file_mime_type = os.popen('file %s -b --mime-type' % (file_path)).read()
 
-    for type,mimetype in sys_cfg.get('file_feature',dict()).get('mimetype',dict()).items():
+    for type, mimetype in sys_cfg.get('file_feature', dict()).get('mimetype', dict()).items():
         if file_mime_type.startswith(mimetype):
             return type
     return 'other'
+
 
 def detect_filetype(file_path):
     """
@@ -73,9 +74,11 @@ def detect_filetype(file_path):
     :param file_path:
     :return:
     """
+    if not is_text_file(file_path):
+        return 'other'
     postfix_type = detect_postfix(file_path)
-    mimetype_type = detect_mimetype(file_path)
-    return postfix_type if postfix_type != 'other' else mimetype_type
+    return postfix_type if postfix_type != 'other' else detect_mimetype(file_path)
+
 
 def is_text_file(file_path):
     """
@@ -83,7 +86,8 @@ def is_text_file(file_path):
     :param file_path:  文件路径
     :return: True: 文本文件， Falase： 非文本文件
     """
-    return True if detect_postfix(file_path) != 'other' or os.popen('file %s -b --mime-type' % (file_path)).read().startswith('text') else False
+    return True if os.popen('file %s -b --mime-type' % (file_path)).read().startswith('text') else False
+
 
 def detect_encoding(file_path):
     """
@@ -91,10 +95,10 @@ def detect_encoding(file_path):
     :param file_path: 需要判断编码的文件路径
     :return: 编码类型
     """
-    file_encoding = os.popen('file %s -b --mime-encoding' %(file_path)).read()
+    file_encoding = os.popen('file %s -b --mime-encoding' % (file_path)).read()
     # 需要区分utf-8有bom和utf-8无bom
     if file_encoding.startswith('utf-8'):
-        if 'with BOM' in os.popen('file %s -b' %(file_path)).read():
+        if 'with BOM' in os.popen('file %s -b' % (file_path)).read():
             file_encoding = 'utf-8 with BOM\n'
         else:
             file_encoding = 'utf-8 no BOM\n'
@@ -150,9 +154,10 @@ def verify_config():
     postfix_type_list = [type for type in list(sys_cfg.get('file_feature').get('postfix').keys())]
     mimetype_type_list = [type for type in list(sys_cfg.get('file_feature').get('mimetype').keys())]
 
-    verify_type_list = [type for type in user_cfg.get('scan_filter',dict()).get('scan_type',list()) if type == 'other' or (type not in postfix_type_list and type not in mimetype_type_list)]
+    verify_type_list = [type for type in user_cfg.get('scan_filter', dict()).get('scan_type', list()) if
+                        type != 'all' and (type not in postfix_type_list and type not in mimetype_type_list)]
     if len(verify_type_list) > 0:
-        logger.error('%s is not the valid type'%(verify_type_list))
+        logger.error('%s is not the valid type' % (verify_type_list))
         sys.exit(2)
 
     logger.debug('verify config is ok')
@@ -171,11 +176,13 @@ def handle_config():
     scan_path_list = reduce(merge_path, scan_path_list[1:], [scan_path_list[0]])
 
     # 如果扫描类型中有all，则忽略其他类型配置
-    if 'all' in user_cfg.get('scan_filter',dict()).get('scan_type',list()):
+    if 'all' in user_cfg.get('scan_filter', dict()).get('scan_type', list()):
         user_cfg['scan_filter']['scan_type'] = ['all']
+
 
 def is_exclude(file_path):
     pass
+
 
 def encdet(root_path, scan_type_list):
     """
@@ -183,25 +190,25 @@ def encdet(root_path, scan_type_list):
     :param root_path:
     :return:
     """
-    output_path = user_cfg.get('output_path','./encdet.out.csv')
-    with open(output_path,'w') as fw:
+    output_path = user_cfg.get('output_path', './encdet.out.csv')
+    with open(output_path, 'w') as fw:
         fw.write('file path,file type,encoding\n\n')
     # 递归每个目录
-    for root,dir_name_list,file_name_list in os.walk(root_path):
+    for root, dir_name_list, file_name_list in os.walk(root_path):
         # 将每个目录下的文件转换为绝对路径，再过滤需要的类型
-        path_list = list()
-        if 'all' in scan_type_list: # 所有text文件
-            path_list = list(filter(lambda path: detect_postfix(path) != 'other' or os.popen('file %s -b --mime-type' % (path)).read().startswith('text'),
-                                    list(map(lambda file_name:os.path.join(root,file_name), file_name_list))))
-        else: # 需要过滤类型
-            path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list, list(map(lambda file_name:os.path.join(root,file_name), file_name_list))))
+        if 'all' in scan_type_list:  # 所有text文件
+            path_list = list(filter(lambda path: is_text_file(path),
+                                    list(map(lambda file_name: os.path.join(root, file_name), file_name_list))))
+        else:  # 需要过滤类型
+            path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list,
+                                    list(map(lambda file_name: os.path.join(root, file_name), file_name_list))))
         # 目录下所有符合条件的文件的编码
         file_encoding_list = list(map(lambda path: detect_encoding(path), path_list))
         # 目录下所有符合条件的文件类型
         file_type_list = list(map(lambda path: detect_filetype(path), path_list))
-        for index,file_encoding in enumerate(file_encoding_list):
+        for index, file_encoding in enumerate(file_encoding_list):
             with open(output_path, 'a') as fw:
-                fw.write('%s,%s,%s' %(path_list[index], file_type_list[index], file_encoding))
+                fw.write('%s,%s,%s' % (path_list[index], file_type_list[index], file_encoding))
 
 
 def pathcmp(path1, path2):
@@ -287,7 +294,7 @@ def main(argv):
         scan_path_list = user_cfg.get('scan_filter', dict()).get('scan_path', list())
         scan_type_list = user_cfg.get('scan_filter', dict()).get('scan_type', list())
         for scan_path in scan_path_list:
-            encdet(scan_path,scan_type_list)
+            encdet(scan_path, scan_type_list)
     # 其他不能识别的命令，打印帮助信息
     else:
         logger.error('option %s not recognized' % (argv[1]))
