@@ -105,6 +105,31 @@ def detect_encoding(file_path):
     return file_encoding
 
 
+def need_scan(file_path):
+    """
+    根据排除规则，判断文件路径是否需要扫描
+    :param file_path: 需要判断的文件路径
+    :return: boolean，true 表示需要扫描，false表示是排除列表中的，不需要扫描
+    """
+    exclude_path_list = user_cfg.get('exclude_filter', dict()).get('exclude_path', list())
+    exclude_regex_list = user_cfg.get('exclude_filter', dict()).get('exclude_regex', list())
+
+    # 没有过滤规则，全部文件都需要扫描
+    if len(exclude_path_list) == 0 and len(exclude_regex_list) == 0:
+        return True
+
+    # exclude_path 中有路径包含扫描路径，或者等于扫描路径，则不需要扫描
+    if len(list(filter(lambda exclude_path: pathcmp(file_path, exclude_path) <= 0, exclude_path_list))) > 0:
+        return False
+
+    # 有匹配正则的，则不需要扫描
+    if len(list(filter(lambda exclude_regex: re.match(exclude_regex, file_path), exclude_regex_list))) > 0:
+        return False
+
+    # 没有匹配,需要扫描
+    return True
+
+
 def helpmsg():
     """
     打印帮助信息
@@ -185,10 +210,6 @@ def handle_config():
         user_cfg['scan_filter']['scan_type'] = ['all']
 
 
-def is_exclude(file_path):
-    pass
-
-
 def encdet(root_path, scan_type_list):
     """
     核心函数，递归检查编码，并输出结果
@@ -198,12 +219,20 @@ def encdet(root_path, scan_type_list):
     output_path = user_cfg.get('output_path', './encdet.out.csv')
     # 递归每个目录
     for root, dir_name_list, file_name_list in os.walk(root_path):
+        # 根目录已经被排除列表排除，直接结束子目录遍历
+        if not need_scan(root):
+            # 不再遍历此目录下的子目录
+            dir_name_list[:] = []
+            # 不需处理目录下的文件
+            continue
+
         # 将每个目录下的文件转换为绝对路径，再过滤需要的类型
+        # all类型，过滤所有text文件，并未被排除的文件
         if 'all' in scan_type_list:  # 所有text文件
-            path_list = list(filter(lambda path: is_text_file(path),
+            path_list = list(filter(lambda path: is_text_file(path) and need_scan(path),
                                     list(map(lambda file_name: os.path.join(root, file_name), file_name_list))))
         else:  # 需要过滤类型
-            path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list,
+            path_list = list(filter(lambda path: detect_filetype(path) in scan_type_list and need_scan(path),
                                     list(map(lambda file_name: os.path.join(root, file_name), file_name_list))))
         # 目录下所有符合条件的文件的编码
         file_encoding_list = list(map(lambda path: detect_encoding(path), path_list))
@@ -212,6 +241,16 @@ def encdet(root_path, scan_type_list):
         for index, file_encoding in enumerate(file_encoding_list):
             with open(output_path, 'a') as fw:
                 fw.write('%s,%s,%s' % (path_list[index], file_type_list[index], file_encoding))
+
+
+def diffset(list1, list2):
+    """
+    求两个列表的差集
+    :param list1:
+    :param list2:
+    :return: 差集
+    """
+    return list(set(list1) ^ set(list2))
 
 
 def pathcmp(path1, path2):
@@ -225,8 +264,8 @@ def pathcmp(path1, path2):
     0： path1 与 path2相等
     -1：path2 包含 path1
     """
-    path1_list = path1.split(os.path.sep)
-    path2_list = path2.split(os.path.sep)
+    path1_list = os.path.realpath(path1).split(os.path.sep)
+    path2_list = os.path.realpath(path2).split(os.path.sep)
 
     # 路径相等
     if path1_list == path2_list:
@@ -310,4 +349,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    logger.info('starting encoding detect ......')
     main(sys.argv)

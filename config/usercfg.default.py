@@ -24,10 +24,10 @@ user_cfg = {
     # 扫描黑名单过滤，支持路径和正则配置
     'exclude_filter': {
         'exclude_path': [
-
+            # '/tmp'
         ],
         'exclude_regex': [
-
+            # re.compile(r'/tmp/*')
         ]
     },
 
