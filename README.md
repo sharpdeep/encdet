@@ -1,8 +1,12 @@
-#!/usr/bin/env python
-# -*- encoding: utf-8 -*-
+# encdet
 
-import re
+## Usage
 
+1. 复制`/config/usercfg.default.py` 到 `/config/usercfg.py`
+
+2. 修改`/config/usercfg.py`配置扫描参数，扫描参数配置如下：
+
+```
 user_cfg = {
     # 扫描过滤，支持路径和文件类型过滤
     'scan_filter': {
@@ -20,7 +24,7 @@ user_cfg = {
         ]
     },
 
-    # 扫描黑名单过滤，支持路径和正则配置
+    # 扫描黑名单过滤，支持路径和正则配置,可以不配置
     'exclude_filter': {
         'exclude_path': [
             # '/tmp'
@@ -37,3 +41,17 @@ user_cfg = {
     #  扫描过程中，扫描路径的排除路径，可以用于排错
     'exclude_file': './encdet.exclude.csv'
 }
+```
+
+必须的配置只有扫描路径和扫描类型
+
+3. 运行扫描程序
+```
+python encdet.py scan
+```
+
+## 注意事项
+
+1. 因为使用了Linux内置的`file`命令，所以必须运行在Linux上，目前还没有Windowns的移植版本
+
+2. 代码仅在Python2上测试通过
